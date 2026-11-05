@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hệ đa agent dự đoán tiểu đường</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2430;--mute:#667085;--line:#e3e7ee;--accent:#1d6fd6;--ok:#16825d;--bad:#c4361f;--warn:#b7791f}
+@media (prefers-color-scheme:dark){:root{--bg:#12161c;--card:#1b212a;--ink:#e8ecf2;--mute:#97a1b0;--line:#2b3340;--accent:#5aa2ff;--ok:#43c394;--bad:#ff7a63;--warn:#e3b04b}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:28px 20px 8px;max-width:1000px;margin:auto}
+h1{margin:0 0 4px;font-size:24px}
+header p{margin:0;color:var(--mute)}
+nav{max-width:1000px;margin:14px auto 0;padding:0 20px;display:flex;gap:6px}
+nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 16px;border-radius:8px;cursor:pointer;font:inherit}
+nav button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+main{max-width:1000px;margin:14px auto 40px;padding:0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--mute)}
+input,select{width:100%;margin-top:3px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+details summary{cursor:pointer;font-weight:600}
+details .hint{color:var(--mute);font-size:13px;margin:4px 0 12px}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{background:var(--accent);color:#fff;border:0;padding:10px 22px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:400}
+.btn:disabled{opacity:.6;cursor:wait}
+.err{color:var(--bad)}
+.res{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.agent{border:1px solid var(--line);border-radius:10px;padding:14px}
+.agent h3{margin:0 0 8px;font-size:14px}
+.pct{font-size:30px;font-weight:700}
+.bar{position:relative;height:10px;background:var(--line);border-radius:6px;margin:8px 0 4px}
+.bar i{display:block;height:100%;border-radius:6px}
+.bar b{position:absolute;top:-4px;width:2px;height:18px;background:var(--ink)}
+.tag{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;color:#fff}
+.small{font-size:12px;color:var(--mute)}
+.vote{font-size:17px;font-weight:600;margin:0 0 12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.scroll{overflow-x:auto}
+.figs{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.figs img{width:100%;border-radius:8px;border:1px solid var(--line);background:#fff}
+.disc{font-size:13px;color:var(--mute);border-left:3px solid var(--warn);padding-left:10px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Hệ đa agent dự đoán đái tháo đường</h1>
+  <p>3 agent, mỗi agent học từ một dataset khác nhau (Pima · Diabetes 100k · CDC BRFSS) và bỏ phiếu như một "hội đồng".</p>
+</header>
+<nav><button id="t1" class="on">Dự đoán</button><button id="t2">Kết quả nghiên cứu</button></nav>
+<main>
+<section id="p1">
+  <form id="f" autocomplete="off">
+    <div class="card"><h2>Thông tin chung <span class="small">(tự điền sang các agent)</span></h2><div class="grid" id="g-common"></div></div>
+    <div class="card"><details id="d-pima"><summary>Agent Pima – chỉ số lâm sàng</summary><p class="hint">Bỏ trống trường nào, mô hình tự điền bằng trung vị.</p><div class="grid" id="g-pima"></div></details></div>
+    <div class="card"><details id="d-kaggle100k"><summary>Agent Diabetes 100k – HbA1c &amp; đường huyết</summary><p class="hint">Có HbA1c sẽ chính xác hơn nhiều.</p><div class="grid" id="g-kaggle100k"></div></details></div>
+    <div class="card"><details id="d-brfss"><summary>Agent BRFSS – khảo sát lối sống, bệnh nền</summary><p class="hint">Cần điền ≥ 50% trường (kể cả tuổi, BMI) thì agent mới tham gia.</p><div class="grid" id="g-brfss"></div></details></div>
+    <div class="actions">
+      <button class="btn" id="go">Dự đoán</button>
+      <button type="button" class="btn ghost" id="ex">Điền ví dụ</button>
+      <button type="button" class="btn ghost" id="rs">Xóa</button>
+      <span class="err" id="err"></span>
+    </div>
+  </form>
+  <div class="card hide" id="out" style="margin-top:14px">
+    <p class="vote" id="vote"></p><div class="res" id="res"></div>
+    <p class="disc" style="margin-top:14px">Mô hình nghiên cứu cho môn học, <b>không phải công cụ chẩn đoán y khoa</b>. Mỗi agent học từ một quần thể khác nhau nên kết quả có thể mâu thuẫn; hãy hỏi bác sĩ khi lo ngại.</p>
+  </div>
+</section>
+<section id="p2" class="hide">
+  <div class="card"><h2>Chỉ số trên tập test</h2><div class="scroll"><table id="tbl"></table></div></div>
+  <div class="card"><h2>Biểu đồ</h2><div class="figs" id="figs"></div></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let SCHEMA={};
+const EX={common:{age:52,bmi:33.5,sex:"female"},pima:{Pregnancies:2,Glucose:150,BloodPressure:80,DiabetesPedigreeFunction:.6},
+ kaggle100k:{hypertension:1,heart_disease:0,smoking_history:"never",hbA1c_level:6.6,blood_glucose_level:155},
+ brfss:{HighBP:1,HighChol:1,CholCheck:1,Smoker:0,Stroke:0,HeartDiseaseorAttack:0,PhysActivity:0,GenHlth:4,DiffWalk:0}};
+function field(g,f){
+  const l=document.createElement('label');l.textContent=f.label+(f.required?' *':'');
+  let el;
+  if(f.kind==='select'){el=document.createElement('select');el.add(new Option('— chưa rõ —',''));f.options.forEach(o=>el.add(new Option(o[1],o[0])))}
+  else{el=document.createElement('input');el.type='number';el.inputMode='decimal';el.step=f.step||1;if(f.min!=null)el.min=f.min;if(f.max!=null)el.max=f.max}
+  el.dataset.g=g;el.dataset.n=f.name;if(f.required)el.required=true;l.appendChild(el);return l;
+}
+function collect(){
+  const p={};document.querySelectorAll('[data-g]').forEach(e=>{if(e.value!==''){(p[e.dataset.g]??={})[e.dataset.n]=e.value}});return p;
+}
+function fill(d){
+  document.querySelectorAll('[data-g]').forEach(e=>{const v=(d[e.dataset.g]||{})[e.dataset.n];e.value=v==null?'':v});
+  ['pima','kaggle100k','brfss'].forEach(k=>$('d-'+k).open=!!Object.keys(d[k]||{}).length);
+}
+function card(r){
+  if(r.status!=='ok')return `<div class="agent"><h3>${r.label}</h3><span class="tag" style="background:var(--mute)">${r.status==='skipped'?'Bỏ qua':'Thiếu mô hình'}</span><p class="small">${r.reason||'Không tìm thấy file mô hình.'}</p></div>`;
+  const pct=(r.probability*100).toFixed(1),col=r.high_risk?'var(--bad)':'var(--ok)';
+  return `<div class="agent"><h3>${r.label}</h3><div class="pct" style="color:${col}">${pct}%</div>
+  <div class="bar"><i style="width:${Math.min(100,pct)}%;background:${col}"></i><b style="left:${r.threshold*100}%"></b></div>
+  <div class="small">Vạch đen = ngưỡng ${r.threshold.toFixed(2)} · mô hình ${r.model}</div>
+  <p><span class="tag" style="background:${col}">${r.high_risk?'NGUY CƠ CAO':'Thấp hơn ngưỡng'}</span></p>
+  <div class="small">${r.features_used}/${r.features_total} đặc trưng được cung cấp</div></div>`;
+}
+$('f').onsubmit=async e=>{
+  e.preventDefault();$('err').textContent='';$('go').disabled=true;
+  try{
+    const r=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||'Lỗi máy chủ');
+    $('res').innerHTML=d.results.map(card).join('');
+    $('vote').textContent=d.votes_total?`Hội đồng: ${d.votes_high}/${d.votes_total} agent cảnh báo nguy cơ cao`:'Chưa agent nào đủ dữ liệu — hãy điền thêm thông tin.';
+    $('out').classList.remove('hide');$('out').scrollIntoView({behavior:'smooth'});
+  }catch(x){$('err').textContent=x.message}finally{$('go').disabled=false}
+};
+$('ex').onclick=()=>fill(EX);$('rs').onclick=()=>{fill({});$('out').classList.add('hide')};
+function tab(n){$('p1').classList.toggle('hide',n!==1);$('p2').classList.toggle('hide',n!==2);$('t1').classList.toggle('on',n===1);$('t2').classList.toggle('on',n===2);if(n===2)loadReport()}
+$('t1').onclick=()=>tab(1);$('t2').onclick=()=>tab(2);
+let rep=false;
+async function loadReport(){
+  if(rep)return;rep=true;const d=await (await fetch('/api/report')).json();
+  const cols=[['ds','Dataset'],['best','Mô hình'],['auc','AUC'],['recall','Recall'],['specificity','Specificity'],['precision','Precision'],['f2','F2'],['ece','ECE']];
+  $('tbl').innerHTML='<tr>'+cols.map(c=>`<th>${c[1]}</th>`).join('')+'</tr>'+d.metrics.map(m=>'<tr>'+cols.map(c=>`<td>${typeof m[c[0]]==='number'?m[c[0]].toFixed(3):m[c[0]]}</td>`).join('')+'</tr>').join('');
+  $('figs').innerHTML=d.figures.map(f=>`<a href="/figures/${f}" target="_blank"><img loading="lazy" src="/figures/${f}" alt="${f}"></a>`).join('')||'<p class="small">Chưa có biểu đồ — chạy python main.py.</p>';
+}
+(async()=>{const d=await (await fetch('/api/schema')).json();SCHEMA=d.schema;
+  for(const g in SCHEMA){const box=$('g-'+g);SCHEMA[g].forEach(f=>box.appendChild(field(g,f)))}})();
+</script>
+</body>
+</html>

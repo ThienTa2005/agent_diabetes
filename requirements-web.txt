@@ -1,0 +1,8 @@
+# Chỉ những gói cần để CHẠY WEB (không cần matplotlib / dữ liệu gốc).
+# File models/*.joblib phụ thuộc phiên bản scikit-learn: giữ cùng dòng 1.9.x với bản dùng để huấn luyện.
+flask>=3.0
+gunicorn>=22.0
+numpy>=1.26
+pandas>=2.0
+scikit-learn~=1.9.0
+joblib>=1.3
